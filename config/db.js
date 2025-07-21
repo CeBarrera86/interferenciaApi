@@ -25,13 +25,11 @@ async function connectDb() {
     try {
         // Si ya existe un pool, lo devuelve. Esto evita crear múltiples pools.
         if (pool && pool.connected) {
-            console.log('Ya conectado a la base de datos.');
             return pool;
         }
 
         // Crea un nuevo pool de conexiones utilizando la configuración definida.
         pool = await sql.connect(config);
-        console.log('Conexión a SQL Server establecida.');
         return pool;
     } catch (err) {
         console.error('Error al conectar a la base de datos:', err);

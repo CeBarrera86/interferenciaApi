@@ -3,18 +3,18 @@ const InterferenciaEstado = require('../models/interferenciaEstado');
 const fs = require('fs').promises;
 const path = require('path');
 const { validationResult } = require('express-validator');
+const { transformacionDatos } = require('../utils/transformacionDatos');
 
 const interferenciaController = {
   /**
    * Almacena los datos de una nueva interferencia.
    * @param {Object} req - (contiene los datos del req.body y el req.file).
-   * @param {Object} res - 
+   * @param {Object} res
    */
   store: async (req, res) => {
-    // Verifica si hay errores de validación
+    // Verifica si hay errores de validación según Middleware de validación en routes
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      // Si hay errores, devuelve una respuesta 400 con los detalles de los errores
       console.error('Errores de validación:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
@@ -23,7 +23,11 @@ const interferenciaController = {
     let pathOriginal = null;
 
     try {
-      const interferenciaData = req.body;
+      let interferenciaData = req.body;
+
+      // Aplicar transformaciones a los datos recibidos
+      interferenciaData = transformacionDatos(interferenciaData);
+
       const archivoAdjunto = req.file;
 
       // Preparar los datos para la inserción inicial
@@ -35,11 +39,11 @@ const interferenciaController = {
         SOI_FECHA: new Date(),
       };
 
-      // 1. Crea la interferencia
+      // Crea la interferencia
       const result = await Interferencia.store(dataToStore);
       interferenciaId = result.SOI_ID; // Obtengo el ID
 
-      // 2. Procesamiento de archivo
+      // Procesamiento de archivo
       let pathNAS = null;
       if (archivoAdjunto) {
         pathOriginal = archivoAdjunto.path; // Guardar la ruta temporal
@@ -48,7 +52,7 @@ const interferenciaController = {
         const nuevoNombre = `${interferenciaId}${extension}`; // Cambio nombre del archivo
 
         // Destino en el NAS (unidad mapeada)
-        const directorioNAS = 'I:\\Mapas';
+        const directorioNAS = process.env.NAS_PATH;
         pathNAS = path.join(directorioNAS, nuevoNombre);
 
         // Asegurarse conectividad con NAS
@@ -62,14 +66,12 @@ const interferenciaController = {
 
         // Actualiza SOI_PATH en la base de datos
         await Interferencia.update(interferenciaId, pathNAS);
-      } else {
-        console.log('No se adjuntó ningún archivo.');
       }
 
-      // 3. Crear una nueva tupla de datos en INTERFERENCIA_ESTADO_SECTOR
+      // Crear una nueva tupla de datos en INTERFERENCIA_ESTADO_SECTOR
       await InterferenciaEstado.store(interferenciaId, 3, 'Sistema'); // 'Sistemas' se debe reemplazar por usuario logueado
 
-      // 4. Si todo sale bien, devolver que todo salió correcto al frontend
+      // Si todo sale bien, devolver que todo salió correcto al frontend
       res.status(201).json({
         message: 'Interferencia guardada con éxito',
         id: interferenciaId,
@@ -81,15 +83,10 @@ const interferenciaController = {
 
       if (pathOriginal) {
         try {
-          // Verificar si el archivo aún existe antes de intentar eliminarlo de nuevo
-          await fs.access(pathOriginal); // Error si no existe
+          await fs.access(pathOriginal);
           await fs.unlink(pathOriginal);
-          console.log(`Archivo temporal ${pathOriginal} eliminado debido a un error en el catch.`);
         } catch (unlinkError) {
-          // Si el error es ENOENT, significa que ya se eliminó, no es un problema.
-          if (unlinkError.code === 'ENOENT') {
-            console.log(`Archivo temporal ${pathOriginal} ya fue eliminado.`);
-          } else {
+          if (!unlinkError.code === 'ENOENT') {
             console.error(`Error al eliminar el archivo temporal ${pathOriginal} en el catch:`, unlinkError);
           }
         }

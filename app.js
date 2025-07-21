@@ -32,11 +32,9 @@ app.get('/', (req, res) => {
 // Inicia el servidor y conecta a la base de datos
 app.listen(PORT, () => {
   db.connectDb().then(() => {
-    console.log('Conexión a la base de datos establecida.');
   }).catch(err => {
     console.error('Error al conectar a la base de datos:', err.message);
     // Aquí podrías querer salir del proceso si la conexión a la DB es crítica
     process.exit(1);
   });
-  console.log(`Servidor escuchando en el puerto ${PORT}`);
 });
