@@ -73,13 +73,12 @@ const interferenciaController = {
 
       // Si todo sale bien, devolver que todo salió correcto al frontend
       res.status(201).json({
-        message: 'Interferencia guardada con éxito',
-        id: interferenciaId,
-        filePath: pathNAS // Devolver la ruta final si se adjuntó un archivo
+        message: 'Interferencia generada con éxito!',
+        id: interferenciaId
       });
 
     } catch (error) {
-      console.error('Error al procesar el almacenamiento de la interferencia:', error);
+      console.error('Error al procesar la solicitud de interferencia:', error);
 
       if (pathOriginal) {
         try {
@@ -91,7 +90,17 @@ const interferenciaController = {
           }
         }
       }
-      res.status(500).json({ message: 'Error interno del servidor al guardar la interferencia.', error: error.message });
+      let userFriendlyMessage = 'Ocurrió un error inesperado al guardar la interferencia.';
+      if (error.code === 'ENOENT' && error.path && error.path.includes(process.env.NAS_PATH)) {
+        userFriendlyMessage = 'No se pudo guardar el archivo adjunto en el destino. Verifique la conexión de red.';
+      } else if (error.message.includes('SQLSTATE')) {
+        userFriendlyMessage = 'Problema al interactuar con la base de datos.';
+      }
+
+      res.status(500).json({
+        message: userFriendlyMessage,
+        details: error.message
+      });
     }
   }
 };
