@@ -102,6 +102,16 @@ const validateInterferencia = [
             }
             return true;
         }),
+    body('SOI_SERVICIO')
+        .notEmpty().withMessage('Debe seleccionar al menos un servicio.')
+        .isString().withMessage('SOI_SERVICIO debe ser una cadena de texto.')
+        .customSanitizer(value => value.split(',').map(Number))
+        .isArray({ min: 1 }).withMessage('Debe seleccionar al menos un servicio.')
+        .custom(value => {
+            // Puedes agregar validaciones adicionales aquí si es necesario,
+            // por ejemplo, para asegurarte de que los IDs existan.
+            return true;
+        })
 ];
 
 router.post('/store', upload.single('SOI_ADJUNTO'), validateInterferencia, interferenciaController.store);
