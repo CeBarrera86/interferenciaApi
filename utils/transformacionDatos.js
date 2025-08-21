@@ -4,13 +4,13 @@
  * @returns {Object}
  */
 const trimStringsInObject = (data) => {
-  const newData = { ...data }; // Crea una copia para no modificar el objeto original directamente
-  for (const key in newData) {
-    if (typeof newData[key] === 'string') {
-      newData[key] = newData[key].trim();
+    const newData = { ...data };
+    for (const key in newData) {
+        if (typeof newData[key] === 'string') {
+            newData[key] = newData[key].trim();
+        }
     }
-  }
-  return newData;
+    return newData;
 };
 
 /**
@@ -20,13 +20,13 @@ const trimStringsInObject = (data) => {
  * @returns {Object}
  */
 const camposMayuscula = (data, fieldsToUppercase) => {
-  const newData = { ...data };
-  fieldsToUppercase.forEach(field => {
-    if (typeof newData[field] === 'string' && newData[field]) { // Asegura que el campo exista y no sea null/undefined
-      newData[field] = newData[field].toUpperCase();
-    }
-  });
-  return newData;
+    const newData = { ...data };
+    fieldsToUppercase.forEach(field => {
+        if (typeof newData[field] === 'string' && newData[field]) {
+            newData[field] = newData[field].toUpperCase();
+        }
+    });
+    return newData;
 };
 
 /**
@@ -35,44 +35,57 @@ const camposMayuscula = (data, fieldsToUppercase) => {
  * @returns {string | null | undefined}
  */
 const formatoNombreCalle = (streetName) => {
-  if (!streetName) return streetName; // Retorna null/undefined si el campo está vacío
-  let cleanedStreet = streetName.toLowerCase();
-  if (!cleanedStreet.startsWith('calle ')) {
-    return 'CALLE ' + streetName.toUpperCase();
-  }
-  return streetName.toUpperCase();
+    if (!streetName) return streetName;
+    let cleanedStreet = streetName.toLowerCase();
+    if (!cleanedStreet.startsWith('calle ')) {
+        return 'CALLE ' + streetName.toUpperCase();
+    }
+    return streetName.toUpperCase();
 };
 
 /**
  * Aplica transformaciones específicas a los datos de interferencia.
- * @param {Object} interferenciaData
+ * @param {Object} data - Objeto con los datos a transformar.
+ * @param {string} [prefix='SOI_'] - Prefijo de los campos a transformar.
  * @returns {Object}
  */
-const transformacionDatos = (interferenciaData) => {
-  let datoTransformado = { ...interferenciaData };
+const transformacionDatos = (data, prefix = 'SOI_') => {
+    let datoTransformado = { ...data };
 
-  // Eliminar espacios en blanco al inicio y al final
-  datoTransformado = trimStringsInObject(datoTransformado);
+    // Eliminar espacios en blanco al inicio y al final
+    datoTransformado = trimStringsInObject(datoTransformado);
 
-  // Convertir a mayúsculas los campos específicos
-  datoTransformado = camposMayuscula(datoTransformado, [
-    'SOI_NOMBRE',
-    'SOI_APELLIDO',
-    'SOI_PISO',
-    'SOI_DPTO'
-  ]);
+    // Convertir a mayúsculas los campos específicos
+    const fieldsToUppercase = [
+        `${prefix}NOMBRE`,
+        `${prefix}APELLIDO`,
+        `${prefix}PISO`,
+        `${prefix}DPTO`,
+    ];
+    datoTransformado = camposMayuscula(datoTransformado, fieldsToUppercase);
 
-  // Formatear campos de calle
-  datoTransformado.SOI_CALLE = formatoNombreCalle(datoTransformado.SOI_CALLE);
-  datoTransformado.SOI_ENTRE1 = formatoNombreCalle(datoTransformado.SOI_ENTRE1);
-  datoTransformado.SOI_ENTRE2 = formatoNombreCalle(datoTransformado.SOI_ENTRE2);
+    // Formatear campos de calle
+    const calleKey = `${prefix}CALLE`;
+    const entre1Key = `${prefix}ENTRE1`;
+    const entre2Key = `${prefix}ENTRE2`;
 
-  // Convertir email a minúsculas
-  if (typeof datoTransformado.SOI_EMAIL === 'string' && datoTransformado.SOI_EMAIL) {
-    datoTransformado.SOI_EMAIL = datoTransformado.SOI_EMAIL.toLowerCase();
-  }
+    if (datoTransformado[calleKey]) {
+        datoTransformado[calleKey] = formatoNombreCalle(datoTransformado[calleKey]);
+    }
+    if (datoTransformado[entre1Key]) {
+        datoTransformado[entre1Key] = formatoNombreCalle(datoTransformado[entre1Key]);
+    }
+    if (datoTransformado[entre2Key]) {
+        datoTransformado[entre2Key] = formatoNombreCalle(datoTransformado[entre2Key]);
+    }
 
-  return datoTransformado;
+    // Convertir email a minúsculas
+    const emailKey = `${prefix}EMAIL`;
+    if (typeof datoTransformado[emailKey] === 'string' && datoTransformado[emailKey]) {
+        datoTransformado[emailKey] = datoTransformado[emailKey].toLowerCase();
+    }
+
+    return datoTransformado;
 };
 
 module.exports = {

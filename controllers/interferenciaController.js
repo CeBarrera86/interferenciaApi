@@ -1,21 +1,15 @@
 const Interferencia = require('../models/interferencia');
-const HistorialSolicitudInterferencia = require('../models/historialSolicitudInterferencia');
-const DireccionSolicitudInterferencia = require('../models/direccionSolicitudInterferencia');
+const HistorialInterferencia = require('../models/historialInterferencia');
+const UbicacionInterferencia = require('../models/ubicacionInterferencia');
+const SolicitanteInterferencia = require('../models/solicitanteInterferencia');
 const fs = require('fs').promises;
 const path = require('path');
 const { validationResult } = require('express-validator');
 const { transformacionDatos } = require('../utils/transformacionDatos');
-const { getDb } = require('../config/db');
+const { getDb, sql } = require('../config/db');
 
 const interferenciaController = {
-  /**
-   * Almacena los datos de una nueva interferencia en múltiples tablas de la base de datos
-   * dentro de una transacción para garantizar la integridad.
-   * @param {Object} req - (contiene los datos del req.body y el req.file).
-   * @param {Object} res
-   */
   store: async (req, res) => {
-    // Verifica si hay errores de validación
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       console.error('Errores de validación:', errors.array());
@@ -27,86 +21,124 @@ const interferenciaController = {
     let transaction = null;
 
     try {
-      // Iniciar la transacción
       const pool = getDb();
-      transaction = new pool.Transaction();
+      transaction = new sql.Transaction(pool);
       await transaction.begin();
 
-      // Transformar los datos principales del solicitante (fuera del array de ubicaciones)
-      const interferenciaData = transformacionDatos(req.body);
-      const ubicaciones = JSON.parse(interferenciaData.SOI_UBICACIONES);
-
-      // Separar los datos de la solicitud principal
-      const dataToStoreInterferencia = {
-        SOI_CUIT: interferenciaData.SOI_CUIT,
-        SOI_NOMBRE: interferenciaData.SOI_NOMBRE,
-        SOI_APELLIDO: interferenciaData.SOI_APELLIDO,
-        SOI_PERSONA: interferenciaData.SOI_PERSONA,
-        SOI_EMAIL: interferenciaData.SOI_EMAIL,
-        SOI_DESDE: interferenciaData.SOI_DESDE,
-        SOI_HASTA: interferenciaData.SOI_HASTA,
-        SOI_FECHA: new Date(),
-        SOI_PATH: null, // Se establece en null para la inserción inicial
+      const servicioToEmpresaMap = {
+        1: [2, 3, 6],
+        2: [2],
+        3: [3],
+        6: [6]
       };
 
-      // 1. Crea la solicitud de interferencia principal
-      const resultInterferencia = await Interferencia.store(dataToStoreInterferencia, transaction);
-      interferenciaId = resultInterferencia.SOI_ID;
+      // --- CAMBIO: Se ajustan los nombres de las variables para que coincidan con el frontend (DSI_) ---
+      const {
+        DSI_CUIT,
+        DSI_NOMBRE,
+        DSI_APELLIDO,
+        DSI_PERSONA,
+        DSI_EMAIL,
+        SOI_PROYECTO,
+        SOI_DESCRIPCION,
+        SOI_DESDE,
+        SOI_HASTA,
+        SOI_UBICACIONES,
+        SOI_SERVICIO
+      } = req.body;
 
-      // 2. Crea los registros de dirección para cada ubicación en el array
-      for (const ubicacion of ubicaciones) {
-        // Aplica las transformaciones a CADA objeto de ubicación individual
-        const ubicacionTransformada = transformacionDatos(ubicacion);
-        
-        const dataToStoreDireccion = {
-          DSI_CALLE: ubicacionTransformada.SOI_CALLE,
-          DSI_ALTURA: ubicacionTransformada.SOI_ALTURA,
-          DSI_PISO: ubicacionTransformada.SOI_PISO,
-          DSI_DPTO: ubicacionTransformada.SOI_DPTO,
-          DSI_ENTRE1: ubicacionTransformada.SOI_ENTRE1,
-          DSI_ENTRE2: ubicacionTransformada.SOI_ENTRE2,
-          DSI_VEREDA: ubicacionTransformada.SOI_VEREDA,
-          DSI_LATITUD: ubicacionTransformada.SOI_LATITUD,
-          DSI_LONGITUD: ubicacionTransformada.SOI_LONGITUD,
-          DSI_LOCALIDAD_ID: ubicacionTransformada.SOI_LOCALIDAD_ID,
-        };
-        await DireccionSolicitudInterferencia.store(interferenciaId, dataToStoreDireccion, transaction);
+      // 1. Crea el registro en la tabla DETALLE_SOLICITANTE_INTERFERENCIA
+      const dataToStoreSolicitante = {
+        DSI_CUIT: DSI_CUIT,
+        DSI_NOMBRE: DSI_NOMBRE,
+        DSI_APELLIDO: DSI_APELLIDO,
+        DSI_PERSONA: DSI_PERSONA,
+        DSI_EMAIL: DSI_EMAIL,
+      };
+
+      const solicitanteId = await SolicitanteInterferencia.store(dataToStoreSolicitante, transaction);
+      if (isNaN(solicitanteId)) {
+        throw new Error('El ID del solicitante principal no es un número válido.');
       }
 
-      // 3. Crea una nueva tupla de datos en el historial de estados
-      // El estado 'Pendiente' tiene ID 4 según los datos insertados.
-      await HistorialSolicitudInterferencia.store(interferenciaId, 4, 'Sistema', transaction);
+      const dataToStoreInterferencia = {
+        SOI_DSI_ID: solicitanteId,
+        SOI_PROYECTO,
+        SOI_DESCRIPCION,
+        SOI_DESDE,
+        SOI_HASTA,
+        SOI_FECHA: new Date(),
+        SOI_MAPA: null,
+        SOI_DOCUMENTO: null,
+      };
 
-      // Procesamiento del archivo adjunto
+      // 2. Crea la solicitud de interferencia principal
+      const resultInterferencia = await Interferencia.store(dataToStoreInterferencia, transaction);
+
+      if (resultInterferencia && resultInterferencia.recordset && resultInterferencia.recordset.length > 0) {
+        interferenciaId = Number(resultInterferencia.recordset[0].SOI_ID);
+        if (isNaN(interferenciaId)) {
+          throw new Error('El ID de la interferencia principal no es un número válido.');
+        }
+      } else {
+        throw new Error('No se pudo obtener el ID de la interferencia principal después de la inserción.');
+      }
+
+      // 3. Crea los registros de ubicación para cada ubicación en el array
+      for (const ubicacion of SOI_UBICACIONES) {
+        // La transformación ya debería manejar el prefijo USI_
+        const ubicacionTransformada = transformacionDatos(ubicacion, 'USI_');
+
+        const dataToStoreUbicacion = {
+          USI_CALLE: ubicacionTransformada.USI_CALLE,
+          USI_ALTURA: ubicacionTransformada.USI_ALTURA,
+          USI_PISO: ubicacionTransformada.USI_PISO,
+          USI_DPTO: ubicacionTransformada.USI_DPTO,
+          USI_ENTRE1: ubicacionTransformada.USI_ENTRE1,
+          USI_ENTRE2: ubicacionTransformada.USI_ENTRE2,
+          USI_VEREDA: ubicacionTransformada.USI_VEREDA,
+          USI_LATITUD: ubicacionTransformada.USI_LATITUD,
+          USI_LONGITUD: ubicacionTransformada.USI_LONGITUD,
+          USI_LOCALIDAD_ID: ubicacionTransformada.USI_LOCALIDAD_ID,
+        };
+
+        await UbicacionInterferencia.store(interferenciaId, dataToStoreUbicacion, transaction);
+      }
+
+      // 4. Crea una tupla de datos en el historial de estados por cada empresa
+      const servicios = Array.isArray(SOI_SERVICIO) ? SOI_SERVICIO : [SOI_SERVICIO];
+      const empresasParaHistorial = new Set();
+
+      for (const servicioId of servicios) {
+        const empresas = servicioToEmpresaMap[servicioId];
+        if (empresas) {
+          empresas.forEach(empresaId => empresasParaHistorial.add(empresaId));
+        }
+      }
+
+      for (const empresaId of Array.from(empresasParaHistorial)) {
+        await HistorialInterferencia.store(interferenciaId, 4, empresaId, 'Sistema', transaction);
+      }
+
       const archivoAdjunto = req.file;
       let pathNAS = null;
       if (archivoAdjunto) {
-        pathOriginal = archivoAdjunto.path; // Guardar la ruta temporal
+        pathOriginal = archivoAdjunto.path;
 
-        const extension = path.extname(archivoAdjunto.originalname); // Obtengo extensión del archivo
-        const nuevoNombre = `${interferenciaId}${extension}`; // Cambio nombre del archivo
+        const extension = path.extname(archivoAdjunto.originalname);
+        const nuevoNombre = `${interferenciaId}${extension}`;
 
-        // Destino en el NAS (unidad mapeada)
-        const directorioNAS = process.env.NAS_PATH;
+        const directorioNAS = process.env.NAS_DOCUMENTOS;
         pathNAS = path.join(directorioNAS, nuevoNombre);
 
-        // Asegurar conectividad con NAS
         await fs.mkdir(directorioNAS, { recursive: true });
-
-        // Copia el archivo del directorio temporal al NAS
         await fs.copyFile(pathOriginal, pathNAS);
-
-        // Elimina el archivo temporal original de Multer
         await fs.unlink(pathOriginal);
-
-        // Actualiza SOI_PATH en la base de datos
         await Interferencia.update(interferenciaId, pathNAS, transaction);
       }
 
-      // Si todo fue exitoso, confirmar la transacción
       await transaction.commit();
 
-      // Si todo sale bien, devolver que todo salió correcto al frontend
       res.status(201).json({
         message: 'Interferencia generada con éxito!',
         id: interferenciaId
@@ -114,8 +146,6 @@ const interferenciaController = {
 
     } catch (error) {
       console.error('Error al procesar la solicitud de interferencia:', error);
-
-      // Revertir la transacción en caso de error
       if (transaction) {
         try {
           await transaction.rollback();
@@ -124,20 +154,18 @@ const interferenciaController = {
           console.error('Error al revertir la transacción:', rollbackError);
         }
       }
-
-      // Lógica para eliminar el archivo temporal en caso de fallo
       if (pathOriginal) {
         try {
           await fs.access(pathOriginal);
           await fs.unlink(pathOriginal);
         } catch (unlinkError) {
-          if (!unlinkError.code === 'ENOENT') {
+          if (unlinkError.code !== 'ENOENT') {
             console.error(`Error al eliminar el archivo temporal ${pathOriginal} en el catch:`, unlinkError);
           }
         }
       }
       let userFriendlyMessage = 'Ocurrió un error inesperado al guardar la interferencia.';
-      if (error.code === 'ENOENT' && error.path && error.path.includes(process.env.NAS_PATH)) {
+      if (error.code === 'ENOENT' && error.path && error.path.includes(process.env.NAS_DOCUMENTOS)) {
         userFriendlyMessage = 'No se pudo guardar el archivo adjunto en el destino. Verifique la conexión de red.';
       } else if (error.message.includes('SQLSTATE')) {
         userFriendlyMessage = 'Problema al interactuar con la base de datos.';
@@ -152,111 +180,3 @@ const interferenciaController = {
 };
 
 module.exports = interferenciaController;
-// const Interferencia = require('../models/interferencia');
-// const InterferenciaEstado = require('../models/interferenciaEstado');
-// const fs = require('fs').promises;
-// const path = require('path');
-// const { validationResult } = require('express-validator');
-// const { transformacionDatos } = require('../utils/transformacionDatos');
-
-// const interferenciaController = {
-//   /**
-//    * Almacena los datos de una nueva interferencia.
-//    * @param {Object} req - (contiene los datos del req.body y el req.file).
-//    * @param {Object} res
-//    */
-//   store: async (req, res) => {
-//     // Verifica si hay errores de validación según Middleware de validación en routes
-//     const errors = validationResult(req);
-//     if (!errors.isEmpty()) {
-//       console.error('Errores de validación:', errors.array());
-//       return res.status(400).json({ errors: errors.array() });
-//     }
-
-//     let interferenciaId = null;
-//     let pathOriginal = null;
-
-//     try {
-//       let interferenciaData = req.body;
-
-//       // Aplicar transformaciones a los datos recibidos
-//       interferenciaData = transformacionDatos(interferenciaData);
-
-//       const archivoAdjunto = req.file;
-
-//       // Preparar los datos para la inserción inicial
-//       const dataToStore = {
-//         ...interferenciaData,
-//         SOI_PATH: null, // Se establece en null para la inserción inicial
-//         SOI_DESDE: interferenciaData.SOI_DESDE,
-//         SOI_HASTA: interferenciaData.SOI_HASTA,
-//         SOI_FECHA: new Date(),
-//       };
-
-//       // Crea la interferencia
-//       const result = await Interferencia.store(dataToStore);
-//       interferenciaId = result.SOI_ID; // Obtengo el ID
-
-//       // Procesamiento de archivo
-//       let pathNAS = null;
-//       if (archivoAdjunto) {
-//         pathOriginal = archivoAdjunto.path; // Guardar la ruta temporal
-
-//         const extension = path.extname(archivoAdjunto.originalname); // Obtengo extensión del archivo
-//         const nuevoNombre = `${interferenciaId}${extension}`; // Cambio nombre del archivo
-
-//         // Destino en el NAS (unidad mapeada)
-//         const directorioNAS = process.env.NAS_PATH;
-//         pathNAS = path.join(directorioNAS, nuevoNombre);
-
-//         // Asegurarse conectividad con NAS
-//         await fs.mkdir(directorioNAS, { recursive: true });
-
-//         // Copia el archivo del directorio temporal al NAS
-//         await fs.copyFile(pathOriginal, pathNAS);
-
-//         // Elimina el archivo temporal original de Multer
-//         await fs.unlink(pathOriginal);
-
-//         // Actualiza SOI_PATH en la base de datos
-//         await Interferencia.update(interferenciaId, pathNAS);
-//       }
-
-//       // Crear una nueva tupla de datos en INTERFERENCIA_ESTADO_SECTOR
-//       await InterferenciaEstado.store(interferenciaId, 3, 'Sistema'); // 'Sistemas' se debe reemplazar por usuario logueado
-
-//       // Si todo sale bien, devolver que todo salió correcto al frontend
-//       res.status(201).json({
-//         message: 'Interferencia generada con éxito!',
-//         id: interferenciaId
-//       });
-
-//     } catch (error) {
-//       console.error('Error al procesar la solicitud de interferencia:', error);
-
-//       if (pathOriginal) {
-//         try {
-//           await fs.access(pathOriginal);
-//           await fs.unlink(pathOriginal);
-//         } catch (unlinkError) {
-//           if (!unlinkError.code === 'ENOENT') {
-//             console.error(`Error al eliminar el archivo temporal ${pathOriginal} en el catch:`, unlinkError);
-//           }
-//         }
-//       }
-//       let userFriendlyMessage = 'Ocurrió un error inesperado al guardar la interferencia.';
-//       if (error.code === 'ENOENT' && error.path && error.path.includes(process.env.NAS_PATH)) {
-//         userFriendlyMessage = 'No se pudo guardar el archivo adjunto en el destino. Verifique la conexión de red.';
-//       } else if (error.message.includes('SQLSTATE')) {
-//         userFriendlyMessage = 'Problema al interactuar con la base de datos.';
-//       }
-
-//       res.status(500).json({
-//         message: userFriendlyMessage,
-//         details: error.message
-//       });
-//     }
-//   }
-// };
-
-// module.exports = interferenciaController;
