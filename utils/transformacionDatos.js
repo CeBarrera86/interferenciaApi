@@ -4,13 +4,13 @@
  * @returns {Object}
  */
 const trimStringsInObject = (data) => {
-    const newData = { ...data };
-    for (const key in newData) {
-        if (typeof newData[key] === 'string') {
-            newData[key] = newData[key].trim();
-        }
+  const newData = { ...data };
+  for (const key in newData) {
+    if (typeof newData[key] === 'string') {
+      newData[key] = newData[key].trim();
     }
-    return newData;
+  }
+  return newData;
 };
 
 /**
@@ -20,13 +20,29 @@ const trimStringsInObject = (data) => {
  * @returns {Object}
  */
 const camposMayuscula = (data, fieldsToUppercase) => {
-    const newData = { ...data };
-    fieldsToUppercase.forEach(field => {
-        if (typeof newData[field] === 'string' && newData[field]) {
-            newData[field] = newData[field].toUpperCase();
-        }
-    });
-    return newData;
+  const newData = { ...data };
+  fieldsToUppercase.forEach(field => {
+    if (typeof newData[field] === 'string' && newData[field]) {
+      newData[field] = newData[field].toUpperCase();
+    }
+  });
+  return newData;
+};
+
+/**
+ * Convierte a minúsculas los campos de texto especificados.
+ * @param {Object} data
+ * @param {Array<string>} fieldsToLowercase
+ * @returns {Object}
+ */
+const camposMinuscula = (data, fieldsToLowercase) => {
+  const newData = { ...data };
+  fieldsToLowercase.forEach(field => {
+    if (typeof newData[field] === 'string' && newData[field]) {
+      newData[field] = newData[field].toLowerCase();
+    }
+  });
+  return newData;
 };
 
 /**
@@ -35,59 +51,114 @@ const camposMayuscula = (data, fieldsToUppercase) => {
  * @returns {string | null | undefined}
  */
 const formatoNombreCalle = (streetName) => {
-    if (!streetName) return streetName;
-    let cleanedStreet = streetName.toLowerCase();
-    if (!cleanedStreet.startsWith('calle ')) {
-        return 'CALLE ' + streetName.toUpperCase();
-    }
-    return streetName.toUpperCase();
+  if (!streetName) return streetName;
+  let cleanedStreet = streetName.trim().toUpperCase();
+  if (!cleanedStreet.startsWith('CALLE ')) {
+    return `CALLE ${cleanedStreet}`;
+  }
+  return cleanedStreet;
 };
 
 /**
- * Aplica transformaciones específicas a los datos de interferencia.
- * @param {Object} data - Objeto con los datos a transformar.
+ * Formatea un texto como un párrafo, con la primera letra en mayúscula y el resto en minúscula.
+ * @param {string | null | undefined} text
+ * @returns {string | null | undefined}
+ */
+const formatoParrafo = (text) => {
+  if (!text) return text;
+  let trimmedText = text.trim();
+  if (trimmedText.length === 0) return trimmedText;
+  return trimmedText.charAt(0).toUpperCase() + trimmedText.slice(1).toLowerCase();
+};
+
+/**
+ * Realiza la transformación completa de los datos de un objeto basándose en un prefijo.
+ * @param {Object} data - Objeto de datos a transformar.
  * @param {string} [prefix='SOI_'] - Prefijo de los campos a transformar.
  * @returns {Object}
  */
 const transformacionDatos = (data, prefix = 'SOI_') => {
-    let datoTransformado = { ...data };
+  let datoTransformado = { ...data };
 
-    // Eliminar espacios en blanco al inicio y al final
-    datoTransformado = trimStringsInObject(datoTransformado);
+  // Eliminar espacios en blanco al inicio y al final
+  datoTransformado = trimStringsInObject(datoTransformado);
 
-    // Convertir a mayúsculas los campos específicos
-    const fieldsToUppercase = [
-        `${prefix}NOMBRE`,
-        `${prefix}APELLIDO`,
-        `${prefix}PISO`,
-        `${prefix}DPTO`,
-    ];
-    datoTransformado = camposMayuscula(datoTransformado, fieldsToUppercase);
-
-    // Formatear campos de calle
-    const calleKey = `${prefix}CALLE`;
-    const entre1Key = `${prefix}ENTRE1`;
-    const entre2Key = `${prefix}ENTRE2`;
-
-    if (datoTransformado[calleKey]) {
-        datoTransformado[calleKey] = formatoNombreCalle(datoTransformado[calleKey]);
+  // Mapeo de campos a sus funciones de transformación
+  const transformaciones = {
+    [`${prefix}NOMBRE`]: {
+      uppercase: true,
+      // Si el nombre de la calle necesita un prefijo, aquí lo podrías agregar
+    },
+    [`${prefix}APELLIDO`]: {
+      uppercase: true,
+    },
+    [`${prefix}EMAIL`]: {
+      lowercase: true,
+    },
+    [`${prefix}PROYECTO`]: {
+      uppercase: true,
+    },
+    [`${prefix}DESCRIPCION`]: {
+      paragraph: true,
+    },
+    [`${prefix}CALLE`]: {
+      street: true,
+    },
+    [`${prefix}PISO`]: {
+      uppercase: true,
+    },
+    [`${prefix}DPTO`]: {
+      uppercase: true,
+    },
+    [`${prefix}ENTRE1`]: {
+      street: true,
+    },
+    [`${prefix}ENTRE2`]: {
+      street: true,
+    },
+    [`${prefix}USUARIO`]: {
+      lowercase: true,
+    },
+    [`${prefix}ORIGEN`]: {
+      lowercase: true,
+    },
+    [`${prefix}DESTINO`]: {
+      lowercase: true,
+    },
+    [`${prefix}ASUNTO`]: {
+      paragraph: true,
+    },
+    [`${prefix}MENSAJE`]: {
+      paragraph: true,
     }
-    if (datoTransformado[entre1Key]) {
-        datoTransformado[entre1Key] = formatoNombreCalle(datoTransformado[entre1Key]);
-    }
-    if (datoTransformado[entre2Key]) {
-        datoTransformado[entre2Key] = formatoNombreCalle(datoTransformado[entre2Key]);
-    }
+  };
 
-    // Convertir email a minúsculas
-    const emailKey = `${prefix}EMAIL`;
-    if (typeof datoTransformado[emailKey] === 'string' && datoTransformado[emailKey]) {
-        datoTransformado[emailKey] = datoTransformado[emailKey].toLowerCase();
+  for (const key in datoTransformado) {
+    if (transformaciones[key]) {
+      const rules = transformaciones[key];
+      if (rules.uppercase) {
+        datoTransformado[key] = datoTransformado[key].toUpperCase();
+      }
+      if (rules.lowercase) {
+        datoTransformado[key] = datoTransformado[key].toLowerCase();
+      }
+      if (rules.street) {
+        datoTransformado[key] = formatoNombreCalle(datoTransformado[key]);
+      }
+      if (rules.paragraph) {
+        datoTransformado[key] = formatoParrafo(datoTransformado[key]);
+      }
     }
+  }
 
-    return datoTransformado;
+  return datoTransformado;
 };
 
 module.exports = {
-    transformacionDatos
+  transformacionDatos,
+  trimStringsInObject,
+  camposMayuscula,
+  camposMinuscula,
+  formatoNombreCalle,
+  formatoParrafo
 };
