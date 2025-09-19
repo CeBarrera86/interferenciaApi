@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const db = require('./config/db');
@@ -8,7 +8,7 @@ const localidades = require('./routes/localidades');
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 app.set('view engine', 'ejs');
 app.set('views', './views');
@@ -31,6 +31,7 @@ app.get('/', (req, res) => {
 
 // Inicia el servidor y conecta a la base de datos
 app.listen(PORT, () => {
+  console.log('Escuchando en el puerto: ', PORT);
   db.connectDb().then(() => {
   }).catch(err => {
     console.error('Error al conectar a la base de datos:', err.message);
