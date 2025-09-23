@@ -1,4 +1,6 @@
-﻿const express = require('express');
+﻿// const https = require('https');
+// const fs = require('fs');
+const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const db = require('./config/db');
@@ -29,7 +31,15 @@ app.get('/', (req, res) => {
   res.send('Bienvenido a la API de Interferencia!');
 });
 
+// Certificado SSL
+// console.log('Windows detectado');
+// var httpsOpciones = {
+//   cert: fs.readFileSync(process.env.CERT_CRT),
+//   key: fs.readFileSync(process.env.CERT_KEY)
+// }
+
 // Inicia el servidor y conecta a la base de datos
+// https.createServer(httpsOpciones, app).listen(PORT, () => { // Con certificado activo
 app.listen(PORT, () => {
   console.log('Escuchando en el puerto: ', PORT);
   db.connectDb().then(() => {
