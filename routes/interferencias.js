@@ -126,6 +126,6 @@ const validateInterferencia = [
     .toInt()
 ];
 
-router.post('/store', upload.fields([{ name: 'SOI_DOCUMENTO', maxCount: 1 }, { name: 'SOI_MAPA', maxCount: 1 }]), validateInterferencia, interferenciaController.store);
+router.post('/store', upload.fields([{ name: 'SOI_DOCUMENTO' }, { name: 'SOI_MAPA', maxCount: 1 }]), validateInterferencia, interferenciaController.store);
 
 module.exports = router;

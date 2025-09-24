@@ -2,30 +2,37 @@ const fs = require('fs').promises;
 const path = require('path');
 
 /**
- * Mueve un archivo temporal al NAS y retorna su nueva ruta.
- * @param {object} file - El objeto de archivo de multer.
- * @param {number} id - El ID de la solicitud de interferencia.
- * @param {string} dir - La ruta del directorio de destino en el NAS.
- * @returns {Promise<string | null>} La nueva ruta del archivo o null si no se proporcionó archivo.
+ * Mueve uno o varios archivos al NAS y retorna sus rutas.
+ * @param {object | object[]} file - Archivo único o array de archivos.
+ * @param {number} id - ID de la interferencia.
+ * @param {string} dir - Directorio base en el NAS.
+ * @returns {Promise<string | null>} Ruta del archivo (mapa) o carpeta (documentos).
  */
 const manejarArchivo = async ({ file, id, dir }) => {
-    if (!file) {
-        return null;
-    }
+  if (!file) return null;
 
-    const extension = path.extname(file.originalname);
-    const nuevoNombre = `${id}${extension}`;
-    const rutaNAS = path.join(dir, nuevoNombre);
-    
-    // Asegurarse de que el directorio exista, creando subdirectorios si es necesario
-    await fs.mkdir(dir, { recursive: true });
-    
-    // Mover el archivo del directorio temporal al destino final
-    await fs.copyFile(file.path, rutaNAS);
+  // Si es un array (SOI_DOCUMENTO)
+  if (Array.isArray(file)) {
+    const carpetaDestino = path.join(dir, String(id));
+    await fs.mkdir(carpetaDestino, { recursive: true });
 
-    return rutaNAS;
+    await Promise.all(file.map(async (f) => {
+      const destino = path.join(carpetaDestino, f.originalname);
+      await fs.copyFile(f.path, destino);
+    }));
+
+    return carpetaDestino; // solo la ruta de la carpeta
+  }
+
+  // Si es un archivo único (SOI_MAPA)
+  const extension = path.extname(file.originalname);
+  const nuevoNombre = `${id}${extension}`;
+  const rutaNAS = path.join(dir, nuevoNombre);
+  await fs.mkdir(dir, { recursive: true });
+  await fs.copyFile(file.path, rutaNAS);
+  return rutaNAS;
 };
 
 module.exports = {
-    manejarArchivo
+  manejarArchivo
 };
