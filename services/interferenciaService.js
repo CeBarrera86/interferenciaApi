@@ -51,7 +51,7 @@ const crearInterferencia = async (data, files, transaction) => {
   const empresasSeleccionadas = Array.isArray(data.SOI_EMPRESA) ? data.SOI_EMPRESA.map(Number) : [Number(data.SOI_EMPRESA)];
   const empresasHistorial = new Set();
   for (const empresaId of empresasSeleccionadas) {
-    if (tipoEmpresa[empresaId]) { ctipoEmpresa[empresaId].forEach(id => empresasHistorial.add(id)); c }
+    if (tipoEmpresa[empresaId]) { tipoEmpresa[empresaId].forEach(id => empresasHistorial.add(id)); }
   }
   for (const empresaId of Array.from(empresasHistorial)) {
     await HistorialInterferencia.store(interferenciaId, 4, empresaId, null, transaction);
