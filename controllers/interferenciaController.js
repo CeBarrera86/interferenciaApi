@@ -5,7 +5,6 @@ const fs = require('fs').promises;
 
 const interferenciaController = {
   store: async (req, res) => {
-    // ✅ Parsear JSON SOI_UBICACIONES
     let ubicaciones = [];
     try {
       ubicaciones = JSON.parse(req.body.SOI_UBICACIONES);
@@ -15,9 +14,7 @@ const interferenciaController = {
       return res.status(400).json({ message: 'Ubicaciones mal formateadas. Verificá el envío desde el frontend.' });
     }
 
-    // ✅ Validar todo el cuerpo con yup
     try {
-      // ✅ Inyectar archivos en req.body para que yup los vea
       req.body.SOI_DOCUMENTO = req.files.SOI_DOCUMENTO || [];
       req.body.SOI_MAPA = req.files.SOI_MAPA ? req.files.SOI_MAPA[0] : null;
       await interferenciaSchema.validate(req.body, { abortEarly: false });
@@ -37,19 +34,10 @@ const interferenciaController = {
       transaction = new sql.Transaction(pool);
       await transaction.begin();
 
-      // 🧠 Lógica principal delegada al servicio
-      const { id, rutaDocumentos, rutaMapas } = await crearInterferencia(req.body, req.files, transaction);
+      const { id, rutaDocumentos, rutaMapas, temporales } = await crearInterferencia(req.body, req.files, transaction);
+      pathsOriginales = temporales;
 
-      // 🧹 Preparar archivos para limpieza
-      const mapa = req.files.SOI_MAPA ? req.files.SOI_MAPA[0] : null;
-      const documentos = req.files.SOI_DOCUMENTO || [];
-      if (mapa) pathsOriginales.push(mapa.path);
-      documentos.forEach(doc => pathsOriginales.push(doc.path));
-
-      // 🧹 Eliminar archivos temporales
-      if (pathsOriginales.length > 0) {
-        await Promise.all(pathsOriginales.map(p => fs.unlink(p)));
-      }
+      if (pathsOriginales.length > 0) { await Promise.all(pathsOriginales.map(p => fs.unlink(p))); }
 
       await transaction.commit();
 
@@ -70,7 +58,6 @@ const interferenciaController = {
         }
       }
 
-      // 🧹 Limpieza en caso de error
       if (pathsOriginales.length > 0) {
         try {
           await Promise.all(pathsOriginales.map(p => fs.unlink(p)));

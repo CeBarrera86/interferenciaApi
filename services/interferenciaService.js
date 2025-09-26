@@ -51,9 +51,7 @@ const crearInterferencia = async (data, files, transaction) => {
   const empresasSeleccionadas = Array.isArray(data.SOI_EMPRESA) ? data.SOI_EMPRESA.map(Number) : [Number(data.SOI_EMPRESA)];
   const empresasHistorial = new Set();
   for (const empresaId of empresasSeleccionadas) {
-    if (tipoEmpresa[empresaId]) {
-      tipoEmpresa[empresaId].forEach(id => empresasHistorial.add(id));
-    }
+    if (tipoEmpresa[empresaId]) { ctipoEmpresa[empresaId].forEach(id => empresasHistorial.add(id)); c }
   }
   for (const empresaId of Array.from(empresasHistorial)) {
     await HistorialInterferencia.store(interferenciaId, 4, empresaId, null, transaction);
@@ -62,18 +60,21 @@ const crearInterferencia = async (data, files, transaction) => {
   const documentos = files.SOI_DOCUMENTO || [];
   const mapa = files.SOI_MAPA ? files.SOI_MAPA[0] : null;
 
-  const [rutaMapas, rutaDocumentos] = await Promise.all([
+  const [mapaResult, documentosResult] = await Promise.all([
     manejarArchivo({ file: mapa, id: interferenciaId, dir: process.env.NAS_MAPAS }),
     manejarArchivo({ file: documentos, id: interferenciaId, dir: process.env.NAS_DOCUMENTOS })
   ]);
 
-  if (rutaMapas || rutaDocumentos) {
-    await Interferencia.update(interferenciaId, rutaDocumentos, rutaMapas, transaction);
+  if (mapaResult.destino || documentosResult.destino) {
+    await Interferencia.update(interferenciaId, documentosResult.destino, mapaResult.destino, transaction);
   }
 
-  return { id: interferenciaId, rutaDocumentos, rutaMapas };
+  return {
+    id: interferenciaId,
+    rutaDocumentos: documentosResult.destino,
+    rutaMapas: mapaResult.destino,
+    temporales: [...mapaResult.temporales, ...documentosResult.temporales]
+  };
 };
 
-module.exports = {
-  crearInterferencia
-};
+module.exports = { crearInterferencia };
