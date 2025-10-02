@@ -1,5 +1,6 @@
 const { getDb, sql } = require('../config/db');
 const { crearInterferencia } = require('../services/interferenciaService');
+const { enviarEmailConfirmacion } = require('../services/emailConfirmacionService');
 const { interferenciaSchema } = require('../validation/interferenciaSchema');
 const fs = require('fs').promises;
 
@@ -40,6 +41,15 @@ const interferenciaController = {
       if (pathsOriginales.length > 0) { await Promise.all(pathsOriginales.map(p => fs.unlink(p))); }
 
       await transaction.commit();
+
+      // Notificar al solicitante
+      await enviarEmailConfirmacion({
+        destinatario: req.body.DSI_EMAIL,
+        nombre: req.body.DSI_NOMBRE,
+        apellido: req.body.DSI_APELLIDO,
+        proyecto: req.body.SOI_PROYECTO,
+        idInterferencia: id
+      });
 
       res.status(201).json({
         message: 'Interferencia generada con éxito!',
