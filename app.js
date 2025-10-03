@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const db = require('./config/db');
 const interferencias = require('./routes/interferencias');
 const localidades = require('./routes/localidades');
+// const testEmailRoutes = require('./routes/testEmail');
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ app.use(express.urlencoded({ extended: true }));
 // Rutas
 app.use('/api/interferencia', interferencias);
 app.use('/api/localidades', localidades);
+// app.use('/api', testEmailRoutes); // Para el test del funcionamiento de email
 // Ruta de inicio simple
 app.get('/', (req, res) => {
   res.send(`Bienvenido a la API de Interferencia! Entorno: ${ENV}`);
